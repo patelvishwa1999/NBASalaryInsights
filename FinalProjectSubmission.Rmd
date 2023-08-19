@@ -1,0 +1,231 @@
+---
+title: "FinalProject_analysis"
+output: pdf_document
+date: "2022-12-12"
+---
+
+```{r}
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(sqldf)) install.packages("sqldf")
+
+library(tidyverse)
+library(sqldf)
+```
+
+Read the CSV files
+```{r}
+players <- read.csv("/Users/devyanimardia/Downloads/datadavis-nba-salaries/players.csv") 
+salaries <- read.csv("/Users/devyanimardia/Downloads/datadavis-nba-salaries/salaries_1985to2018.csv") 
+```
+
+Joining both datasets with player_id into salaries dataset
+```{r}
+salaries <- salaries %>% inner_join(players, by = c("player_id" = "X_id"))
+```
+
+Age, Height and Weight changes to make it easily usable
+```{r}
+#Age at end of season
+
+salaries$birthDate <- sub(",","", salaries$birthDate)
+
+salaries$birthDate <- as.Date(salaries$birthDate,
+  format = "%B %d %Y")
+
+salaries$Current_age = as.numeric(difftime(Sys.Date(),salaries$birthDate, units = "weeks"))/52.25
+
+salaries$AgeatSeasonEnd= as.integer(salaries$Current_age - (2022- salaries$season_end))
+#Weight
+
+salaries$weight <- as.numeric(sub("lb","", salaries$weight))
+
+#Height
+salaries$height = as.character(sub("-",".", salaries$height))
+
+salaries <- salaries %>% separate(height, c('Feet', 'Inch'))
+
+salaries$heightincm <- as.numeric(salaries$Feet)*30.48 + as.numeric(salaries$Inch)*2.54
+
+
+head(salaries)
+```
+Converting to numeric for better usage
+```{r}
+salaries$career_FG3. <- as.numeric(salaries$career_FG3.)
+salaries$career_FG. <- as.numeric(salaries$career_FG.)
+salaries$career_FT. <- as.numeric(salaries$career_FT.)
+salaries$career_PER <- as.numeric(salaries$career_PER)
+salaries$career_TRB <- as.numeric(salaries$career_TRB)
+salaries$career_WS <- as.numeric(salaries$career_WS)
+salaries$career_eFG. <- as.numeric(salaries$career_eFG.)
+salaries$heightincm <- as.numeric(salaries$heightincm)
+
+
+```
+
+Variable name changes and slicing the salaries csv to only get the variables important for us
+
+```{r}
+experimentwithseason <- salaries[c("player_id","heightincm", "weight","season_end", "AgeatSeasonEnd","team","career_AST","career_PTS","career_FG.","career_FG3.","position","shoots","salary","career_FT.","career_G","career_PER","career_TRB","career_WS","career_eFG.")] 
+
+
+names(experimentwithseason) = c("id","height", "weight","season_end", "AgeatSeasonEnd","team","Assits","Points","FieldGoals","FieldGoals3","position","shoots","salary","FreeThrows","Games","PlayerEfficiencyRating","TotalRebounds","WinShares","effectiveFieldGoal")
+
+```
+
+Factorize categorical variables
+```{r}
+experimentwithseason$team.f <- factor(experimentwithseason$team)
+is.factor(experimentwithseason$team.f)
+
+experimentwithseason$shoots.f <- factor(experimentwithseason$shoots)
+is.factor(experimentwithseason$shoots.f)
+
+experimentwithseason$position.f <- factor(experimentwithseason$position)
+is.factor(experimentwithseason$position.f)
+
+```
+Creating 2015 dataframe and removing unwanted columns
+```{r}
+
+df_2015 = subset(experimentwithseason, season_end == 2015)
+
+
+df_2015 = subset(df_2015, season_end == 2015,select = -c(team,shoots,position))
+
+names(df_2015) = c("id","height", "weight","season_end", "AgeatSeasonEnd","Assits","Points","FieldGoals","FieldGoals3","salary","FreeThrows","Games","PlayerEfficiencyRating","TotalRebounds","WinShares","effectiveFieldGoal","team","shoots","position")
+
+df_2015 <- sqldf('select weight, height, AgeatSeasonEnd, team, Assits, FieldGoals, FieldGoals3, position, shoots, FreeThrows, Games, PlayerEfficiencyRating, TotalRebounds, WinShares, effectiveFieldGoal, Points, salary from experimentwithseason where season_end == 2015  group by id')
+
+
+
+
+
+
+str(df_2015)
+
+head(df_2015)
+```
+
+Fitting an initial model with no changes 
+
+```{r}
+
+str(df_2015)
+model1 = lm(salary ~ ., data=df_2015)
+summary(model1)
+plot(model1)
+
+```
+```{r}
+library(MASS)
+lambda = 0.303
+box_cox = boxcox(model1)
+#lambda= box_cox$x[which.max(box_cox$y)]
+#lambda
+modeltest1 = lm(((salary^lambda-1)/lambda)~., df_2015)
+summary(modeltest1)
+plot(modeltest1)
+
+```
+Forward Selection
+```{r}
+n = nrow(df_2015)
+out.null=lm(salary ~1, df_2015)
+out.full=lm(salary~.,df_2015)
+full=formula(lm( salary~., df_2015))
+#out.forward= step(out.null,scope=list(lower=~1,upper=full), k= 2,direction="forward",trace= TRUE)
+```
+
+```{r}
+#out.forward= step(out.null,scope=list(lower=~1,upper=full), k= log(n),direction="forward",trace= TRUE)
+
+
+```
+Backward Elimination
+```{r}
+#out.backward=step(out.full ,scope=list(lower=~1,upper=full),direction="backward",trace=TRUE ,k=log(n))
+
+```
+
+```{r}
+#out.backward=step(out.full ,scope=list(lower=~1,upper=full),direction="backward",trace=TRUE ,k= 2)
+
+  
+```
+```{r}
+model_3_forwardsel_param = lm(salary ~ WinShares + Points + weight + Assits, data=df_2015)
+summary(model_3_forwardsel_param)
+plot(model_3_forwardsel_param)
+
+model_6_back_param = lm(salary ~ height + weight + AgeatSeasonEnd + Assits + Points + 
+    FieldGoals + FieldGoals3 + FreeThrows + Games + PlayerEfficiencyRating + 
+    TotalRebounds + WinShares + effectiveFieldGoal, data=df_2015)
+summary(model_6_back_param)
+plot(model_6_back_param)
+
+```
+
+```{r}
+#The frequent positions with the positions which are used in categorical variables
+df_2015_frequentpos <- df_2015 %>% filter(position %in% c('Point Guard','Center','Shooting Guard','Power Forward','Small Forward'))
+
+```
+
+```{r}
+#Best model
+
+lambda=0.222
+model_9 = lm(((salary^lambda-1)/lambda)~ ., data = df_2015_frequentpos)
+plot(model_9)
+summary(model_9)
+```
+```{r}
+z = experimentwithseason %>% separate_rows(position, sep = " and ") %>% filter(season_end == 2015)
+
+df_2015_2 = subset(z, season_end == 2015,select = -c(id,team,shoots,position))
+
+names(df_2015_2) = c("height", "weight","season_end", "age_atendofseason","Assits","Points","FieldGoals","FieldGoals3","salary","FreeThrows","Games","PlayerEfficiencyRating","TotalRebounds","WinShares","effectiveFieldGoal","team","shoots","position")
+
+```
+
+```{r}
+model12 = lm(salary ~ .,df_2015_2)
+summary(model12)
+plot(model12)
+
+```
+```{r}
+box_cox = boxcox(model1)
+lambda= box_cox$x[which.max(box_cox$y)]
+lambda
+modeltest2 = lm(((salary^lambda-1)/lambda)~., df_2015_2)
+summary(modeltest2)
+plot(modeltest2)
+```
+```{r}
+m = sqldf('select height, avg(salary) as meansal, season_end from experimentwithseason group by height, season_end order by meansal, season_end')
+
+m = sqldf('select height, avg(salary) as meansal, season_end from experimentwithseason where height> 200 group by height, season_end order by meansal, season_end')
+
+ggplot(m, aes(height, meansal)) + geom_col()
+ggplot(m, aes(season_end, meansal, fill = height)) + geom_col()
+
+```
+```{r}
+expafter006 = subset(experimentwithseason, season_end > 2000,select = -c(id))
+
+expafter006 %>% group_by(team) %>% count() %>% arrange(desc(n)) %>% ggplot(aes(n, team)) + geom_col() 
+
+expafter006 %>% group_by(season_end) %>% count() %>% ggplot(aes(season_end, n)) + geom_col()
+
+```
+```{r}
+expafter006 %>% group_by(season_end, team) %>% count() %>% ggplot(aes(season_end, n, fill = team))+ geom_col(col = "black", size = 0.2) 
+
+```
+```{r}
+shapiro.test(residuals(model_9))
+shapiro.test(residuals(model1))
+```
+
