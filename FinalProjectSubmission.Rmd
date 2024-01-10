@@ -14,8 +14,8 @@ library(sqldf)
 
 Read the CSV files
 ```{r}
-players <- read.csv("/Users/devyanimardia/Downloads/datadavis-nba-salaries/players.csv") 
-salaries <- read.csv("/Users/devyanimardia/Downloads/datadavis-nba-salaries/salaries_1985to2018.csv") 
+players <- read.csv("/Users/vishwapatel/Downloads/datadavis-nba-salaries/players.csv") 
+salaries <- read.csv("/Users/vishwapatel/Downloads/datadavis-nba-salaries/salaries_1985to2018.csv") 
 ```
 
 Joining both datasets with player_id into salaries dataset
